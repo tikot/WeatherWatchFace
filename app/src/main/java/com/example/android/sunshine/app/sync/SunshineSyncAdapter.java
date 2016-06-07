@@ -24,6 +24,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.support.annotation.IntDef;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.TaskStackBuilder;
 import android.text.format.Time;
@@ -36,12 +38,20 @@ import com.example.android.sunshine.app.R;
 import com.example.android.sunshine.app.Utility;
 import com.example.android.sunshine.app.data.WeatherContract;
 import com.example.android.sunshine.app.muzei.WeatherMuzeiSource;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.Asset;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.PutDataMapRequest;
+import com.google.android.gms.wearable.Wearable;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -52,7 +62,10 @@ import java.net.URL;
 import java.util.Vector;
 import java.util.concurrent.ExecutionException;
 
-public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
+public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter implements
+        GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener,
+        ResultCallback<DataApi.DataItemResult> {
+
     public final String LOG_TAG = SunshineSyncAdapter.class.getSimpleName();
     public static final String ACTION_DATA_UPDATED =
             "com.example.android.sunshine.app.ACTION_DATA_UPDATED";
@@ -87,8 +100,24 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
     public static final int LOCATION_STATUS_UNKNOWN = 3;
     public static final int LOCATION_STATUS_INVALID = 4;
 
+    //wearable
+    public static boolean initWear = false;
+    private GoogleApiClient mGoogleApiClient;
+    private static final String DATA_ITEM_PATH = "/watch_face_weather";
+    private static final String WEATHER_ICON = "WEATHER_ICON";
+    private static final String MAX_TEMP = "MAX_TEMP";
+    private static final String MIN_TEMP = "MIN_TEMP";
+
     public SunshineSyncAdapter(Context context, boolean autoInitialize) {
         super(context, autoInitialize);
+
+        mGoogleApiClient = new GoogleApiClient.Builder(getContext())
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(Wearable.API)
+                .build();
+
+        mGoogleApiClient.connect();
     }
 
     @Override
@@ -330,6 +359,11 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                 weatherValues.put(WeatherContract.WeatherEntry.COLUMN_WEATHER_ID, weatherId);
 
                 cVVector.add(weatherValues);
+
+                //Send today weather to wearable
+                if (i == 0) {
+                    sendToWearable(weatherId, high, low);
+                }
             }
 
             int inserted = 0;
@@ -356,6 +390,35 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
             e.printStackTrace();
             setLocationStatus(getContext(), LOCATION_STATUS_SERVER_INVALID);
         }
+    }
+
+    private void sendToWearable(int weatherIconId, double mTodayHigh, double mTodayLow) {
+        if (!mGoogleApiClient.isConnected()) {
+            Log.e(LOG_TAG, "ERROR: failed to to connect GoogleApiClient");
+            return;
+        }
+
+        Bitmap bitmap = BitmapFactory.decodeResource(getContext().getResources(),
+                Utility.getArtResourceForWeatherCondition(weatherIconId));
+
+        Bitmap icon = Bitmap.createScaledBitmap(bitmap, 100, 100, false);
+
+        ByteArrayOutputStream byteOutputStream = new ByteArrayOutputStream();
+        icon.compress(Bitmap.CompressFormat.PNG, 100, byteOutputStream);
+        Asset asset = Asset.createFromBytes(byteOutputStream.toByteArray());
+
+        PutDataMapRequest mPutData = PutDataMapRequest.create(DATA_ITEM_PATH);
+        mPutData.getDataMap().putAsset(WEATHER_ICON, asset);
+        mPutData.getDataMap().putString(MAX_TEMP, Utility.formatTemperature(getContext(), mTodayHigh));
+        mPutData.getDataMap().putString(MIN_TEMP, Utility.formatTemperature(getContext(), mTodayLow));
+
+        if (initWear) {
+            mPutData.getDataMap().putLong("TIME", System.currentTimeMillis());
+            initWear = false;
+        }
+
+        Wearable.DataApi.putDataItem(mGoogleApiClient, mPutData.asPutDataRequest())
+                .setResultCallback(this);
     }
 
     private void updateWidgets() {
@@ -564,6 +627,11 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
                 context.getString(R.string.content_authority), bundle);
     }
 
+    public static void syncImmediately(Context context, boolean initial) {
+        syncImmediately(context);
+        initWear = initial;
+    }
+
     /**
      * Helper method to get the fake account to be used with SyncAdapter, or make a new one
      * if the fake account doesn't exist yet.  If we make a new account, we call the
@@ -635,5 +703,36 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter {
         SharedPreferences.Editor spe = sp.edit();
         spe.putInt(c.getString(R.string.pref_location_status_key), locationStatus);
         spe.commit();
+    }
+
+    @Override // GoogleApiClient.ConnectionCallbacks
+    public void onConnected(@Nullable Bundle bundle) {
+        if (Log.isLoggable(LOG_TAG, Log.DEBUG)) {
+            Log.d(LOG_TAG, "onConnected: " + bundle);
+        }
+    }
+
+    @Override // GoogleApiClient.ConnectionCallbacks
+    public void onConnectionSuspended(int cause) {
+        if (Log.isLoggable(LOG_TAG, Log.DEBUG)) {
+            Log.d(LOG_TAG, "onConnectionSuspended: " + cause);
+        }
+    }
+
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+        if (Log.isLoggable(LOG_TAG, Log.DEBUG)) {
+            Log.d(LOG_TAG, "onConnectionFailed: " + connectionResult);
+        }
+    }
+
+
+    @Override
+    public void onResult(@NonNull DataApi.DataItemResult dataItemResult) {
+        if (!dataItemResult.getStatus().isSuccess()) {
+            if (Log.isLoggable(LOG_TAG, Log.DEBUG)) {
+                Log.d(LOG_TAG, "onResult: " + dataItemResult.getStatus());
+            }
+        }
     }
 }

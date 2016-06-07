@@ -1,3 +1,16 @@
+Advanced Android WatchFace
+===================================
+
+Synchronizes watchface weather information from the App
+
+Pre-requisites
+-------------
+Android SDK 23 or Higher
+Android Support Wearable 1.4.0
+Google Play Services GCM 8.4.0
+
+Use Gradle to build the app and watchface. Also you will need an API key from OpenWeatherMap.
+
 Advanced Android Sample App
 ===================================
 
@@ -5,15 +18,15 @@ Synchronizes weather information from OpenWeatherMap on Android Phones and Table
 
 Pre-requisites
 --------------
-Android SDK 21 or Higher
-Build Tools version 21.1.2
-Android Support AppCompat 22.2.0
-Android Support Annotations 22.2.0
-Android Support GridLayout 22.2.0
-Android Support CardView 22.2.0
-Android Support Design 22.2.0
-Android Support RecyclerView 22.2.0
-Google Play Services GCM 7.0.0
+Android SDK 23 or Higher
+Build Tools version 23.0.3
+Android Support AppCompat 23.4.0
+Android Support Annotations 23.4.0
+Android Support GridLayout 23.4.0
+Android Support CardView 23.4.0
+Android Support Design 23.4.0
+Android Support RecyclerView 23.4.0
+Google Play Services GCM 8.4.0
 BumpTech Glide 3.5.2
 
 
