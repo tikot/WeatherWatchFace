@@ -356,15 +356,16 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                         mCalendar.get(Calendar.DATE),
                         mCalendar.get(Calendar.YEAR)
                 );
-                canvas.drawText(date, boundCenterX-170, mYOffset + 50, mSubTextPaint);
+                float mDateOffset = mSubTextPaint.measureText(date) / 2;
+                canvas.drawText(date, boundCenterX-mDateOffset, mYOffset + 50, mSubTextPaint);
 
                 if (getPeekCardPosition().isEmpty()) {
                     if (weatherIcon != null)
-                        canvas.drawBitmap(weatherIcon, boundCenterX - 50 - weatherIcon.getWidth(), mYOffset + 100, null);
+                        canvas.drawBitmap(weatherIcon, boundCenterX - 50 - weatherIcon.getWidth(), mYOffset + 80, null);
 
                     if (mLowTemp != null || mHighTemp != null) {
-                        canvas.drawText(mHighTemp, boundCenterX - 45, mYOffset + 170, mMaxText);
-                        canvas.drawText(mLowTemp, boundCenterX + 50, mYOffset + 170, mMinText);
+                        canvas.drawText(mHighTemp, boundCenterX - 45, mYOffset + 140, mMaxText);
+                        canvas.drawText(mLowTemp, boundCenterX + 50, mYOffset + 140, mMinText);
                     }
                 }
             }
